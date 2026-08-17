@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkPlease — Instagram DM Automation Engine</title>
+  <meta name="description" content="Production-ready Instagram DM automation engine handling hostile API conditions, rate limits, out-of-order webhooks, and reconciliation.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="logo-container">
+      <div class="logo-badge">LP</div>
+      <div class="logo-text">
+        <h1>LinkPlease Automation Engine</h1>
+        <p>Production Instagram Webhook & DM Dispatcher</p>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-pill">
+        <span class="status-dot"></span>
+        <span id="worker-status-text">Worker Active (≤10 req/60s)</span>
+      </div>
+      <button class="btn-refresh" id="btn-manual-refresh" title="Refresh live statistics">↻ Refresh</button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+    <!-- Live Metrics Grid -->
+    <section class="metrics-grid">
+      <div class="metric-card sent">
+        <div class="metric-header">
+          <span class="metric-title">Sent (Confirmed)</span>
+          <span>✓</span>
+        </div>
+        <div class="metric-value" id="stat-sent">0</div>
+        <div class="metric-desc">DMs confirmed delivered by Mock API</div>
+      </div>
+
+      <div class="metric-card queued">
+        <div class="metric-header">
+          <span class="metric-title">Queued & Reconciling</span>
+          <span>⏳</span>
+        </div>
+        <div class="metric-value" id="stat-queued">0</div>
+        <div class="metric-desc">Waiting in outbox, in-flight, or reconciling</div>
+      </div>
+
+      <div class="metric-card blocked">
+        <div class="metric-header">
+          <span class="metric-title">Duplicates Blocked</span>
+          <span>🛡️</span>
+        </div>
+        <div class="metric-value" id="stat-blocked">0</div>
+        <div class="metric-desc">Prevented duplicate DMs for same user+rule</div>
+      </div>
+
+      <div class="metric-card failed">
+        <div class="metric-header">
+          <span class="metric-title">Failed</span>
+          <span>✕</span>
+        </div>
+        <div class="metric-value" id="stat-failed">0</div>
+        <div class="metric-desc">Exhausted all retry attempts</div>
+      </div>
+    </section>
+
+    <!-- Two-column interactive panel -->
+    <div class="dashboard-grid">
+      <!-- Rules Manager Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>Keyword Rules</span>
+          <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);" id="rules-count">0 active</span>
+        </div>
+
+        <form id="rule-form">
+          <div class="form-group">
+            <label for="rule-keyword">Trigger Keyword (Case-Insensitive)</label>
+            <input type="text" id="rule-keyword" class="form-control" placeholder="e.g. PRICE or DISCOUNT" required>
+          </div>
+          <div class="form-group">
+            <label for="rule-message">Automated DM Message</label>
+            <textarea id="rule-message" class="form-control" placeholder="e.g. Hey! Here is the full price list..." required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" id="btn-save-rule" style="width: 100%;">+ Create Rule (POST /rules)</button>
+        </form>
+
+        <div class="rules-list" id="rules-container">
+          <!-- Dynamically populated rules -->
+        </div>
+      </div>
+
+      <!-- Simulation & Webhook Tester Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>Simulation & Hostile Testing</span>
+          <span class="badge badge-reconciling">Part C Ready</span>
+        </div>
+
+        <form id="sim-form">
+          <div class="form-group">
+            <label for="sim-url">Target Webhook URL</label>
+            <input type="url" id="sim-url" class="form-control" placeholder="https://your-domain.com/webhook" required>
+          </div>
+          <div class="sim-grid">
+            <div class="form-group">
+              <label for="sim-count">Count (Events)</label>
+              <input type="number" id="sim-count" class="form-control" value="500" min="1" max="1000">
+            </div>
+            <div class="form-group">
+              <label for="sim-duration">Duration (Seconds)</label>
+              <input type="number" id="sim-duration" class="form-control" value="10" min="1" max="60">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-emerald" id="btn-start-sim" style="width: 100%;">
+            ⚡ Trigger Simulation (POST /v1/simulate/start)
+          </button>
+        </form>
+
+        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+          <input type="text" id="truth-run-id" class="form-control" placeholder="Enter Run ID to inspect truth...">
+          <button class="btn btn-primary" id="btn-check-truth">Check Truth</button>
+        </div>
+
+        <div class="truth-box" id="truth-result" style="display: none;"></div>
+      </div>
+    </div>
+
+    <!-- Recent Activity & DM Jobs Table -->
+    <div class="card activity-card">
+      <div class="card-title">
+        <span>Recent DM Dispatch Jobs</span>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Real-time SQLite Queue State</span>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Recipient</th>
+              <th>Comment ID</th>
+              <th>DM ID</th>
+              <th>Status</th>
+              <th>Retries</th>
+              <th>Last Error</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-tbody">
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--text-muted);">Loading activity...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>LinkPlease Tech Intern Assignment Submission &bull; Complies strictly with <code>POST /rules</code>, <code>POST /webhook</code>, <code>GET /stats</code></p>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
