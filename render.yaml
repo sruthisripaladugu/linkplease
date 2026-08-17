@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: linkplease-automation
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+      - key: PSEUDOGRAM_API_BASE_URL
+        value: https://pseudogram-api.onrender.com
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: 10
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: 60.0
