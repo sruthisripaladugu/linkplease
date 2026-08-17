@@ -1,0 +1,20 @@
+[project]
+name = "linkplease"
+version = "0.1.0"
+description = "Production Instagram DM Automation handling hostile platform APIs"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "uvicorn[standard]>=0.52.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
